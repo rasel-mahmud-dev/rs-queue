@@ -19,7 +19,7 @@ export class Tweet {
     @Column({ type: 'int', nullable: false }) // Assuming authorId is an integer
     authorId!: number;
 
-    @ManyToOne(() => User, user=>user.tweets ) // Many-to-One relationship with User
-    author!: User;
+    // @ManyToOne(() => User, user=>user.tweets ) // Many-to-One relationship with User
+    // author!: User;
 
 }

@@ -1,6 +1,5 @@
 import {EventEmitter} from "events";
-import redis from "redis";
-import {clearTimeout} from "timers";
+import { createClient } from 'redis';
 
 interface RsQueueOptions {
     jobsKey: string;
@@ -15,7 +14,7 @@ class RsQueue extends EventEmitter {
     private option: RsQueueOptions = {
         jobsKey: "rq:jobs",
         doneKey: "rq:done",
-        retryDelay: 100,
+        retryDelay: 2000,
         redisUrl: "",
     };
 
@@ -53,7 +52,7 @@ class RsQueue extends EventEmitter {
 
     async connectRedis() {
         try {
-            this.client = redis.createClient({
+            this.client = createClient({
                 url: this.option.redisUrl ?? "redis://127.0.0.1:6379"
             });
 

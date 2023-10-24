@@ -21,6 +21,6 @@ export class User {
     @Column({type: "varchar", nullable: false})
     lastName!: string
 
-    @OneToMany(() => Tweet, (tweet) => tweet.author)
-    tweets: Tweet[] | undefined
+    // @OneToMany(() => Tweet, (tweet) => tweet.author)
+    // tweets: Tweet[] | undefined
 }

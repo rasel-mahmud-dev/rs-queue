@@ -1,12 +1,6 @@
 import { DataSource } from "typeorm"
 import {User} from "../Models/User";
 import {Tweet} from "../Models/Tweet";
-import {Like} from "../Models/Like";
-import {Comment} from "../Models/Comment";
-import {Role} from "../Models/Role";
-import {UserRoleMapping} from "../Models/UserRoleMapping";
-import {Product} from "../Models/Product";
-import {Category} from "../Models/Category";
 
 const AppDataSource = new DataSource({
     type: "postgres",
@@ -14,8 +8,8 @@ const AppDataSource = new DataSource({
     port: 5432,
     username: "postgres",
     password: "rasel",
-    database: "type_orm",
-    entities: [User, Tweet, Like, Comment, Role, UserRoleMapping, Product, Category],
+    database: "rs_queue_test",
+    entities: [User, Tweet],
     synchronize: true,
     logging: false,
 })
