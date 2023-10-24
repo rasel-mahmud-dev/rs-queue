@@ -8,3 +8,9 @@ RS-Queue is a straightforward job queue that efficiently handles tasks in the ba
 ![img.png](img/img.png)
 
 ![img.png](img/img2.png)
+
+
+### Pending Jobs
+![img.png](img/img_22.png)
+### Done Jobs
+![img_1.png](img/img_1.png)

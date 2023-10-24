@@ -25,7 +25,7 @@ async function executeTask(jobId: string, data: string, done: Function) {
         let tweet = JSON.parse(data)
         await AppDataSource.manager.save(Tweet, tweet)
         // data saved on the database
-        done(true)
+        done(done)
     } catch (error) {
         done(false)
     } finally {
