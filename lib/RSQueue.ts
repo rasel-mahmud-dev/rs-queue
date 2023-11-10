@@ -1,13 +1,13 @@
 import {EventEmitter} from "events";
-import { createClient } from 'redis';
+import {createClient} from "redis";
 
 interface RsQueueOptions {
     jobsKey: string;
     doneKey: string;
     retryDelay?: number;
+    nextJobProcessDelay?: number;
     redisUrl?: string;
 }
-
 
 class RsQueue extends EventEmitter {
 
@@ -15,6 +15,7 @@ class RsQueue extends EventEmitter {
         jobsKey: "rq:jobs",
         doneKey: "rq:done",
         retryDelay: 2000,
+        nextJobProcessDelay: 300,
         redisUrl: "",
     };
 
@@ -25,20 +26,22 @@ class RsQueue extends EventEmitter {
         done: {} as Record<string, string>,
         queue: [] as string[],
         jobs: {} as Record<string, string>,
+        currentJobSuccess: false
     };
 
     private client: any | undefined;
 
     constructor(queueName: string, options: Partial<RsQueueOptions>) {
         super()
-        this.state = {
-            done: {},
-            queue: [],
-            jobs: {}
-        }
-
         if (options) {
-            this.option.retryDelay = options.retryDelay
+            if (options.retryDelay || options.retryDelay === 0) {
+                this.option.retryDelay = options.retryDelay
+            }
+
+            if (options.nextJobProcessDelay || options.nextJobProcessDelay === 0) {
+                this.option.nextJobProcessDelay = options.nextJobProcessDelay
+            }
+
             if (options.redisUrl) this.option.redisUrl = options.redisUrl
         }
 
@@ -68,7 +71,7 @@ class RsQueue extends EventEmitter {
             }
             this.emit("ready")
         } catch (ex: any) {
-            console.log(ex?.message)
+            console.log("Redis connection fail:::", ex?.message)
         }
     }
 
@@ -109,8 +112,12 @@ class RsQueue extends EventEmitter {
         try {
             clearTimeout(this.intervalId);
             this.intervalId = setTimeout(async () => {
-                await this.queueProcess()
-            }, this.option.retryDelay)
+                    await this.queueProcess()
+                }, this.state.currentJobSuccess
+                    ? this.option.nextJobProcessDelay
+                    : this.option.retryDelay
+            )
+
         } catch (ex: any) {
             console.log(ex?.message)
         }
@@ -133,10 +140,12 @@ class RsQueue extends EventEmitter {
                     this.state.done[queueTask] = jobs[queueTask]
                     this.state.queue.shift()
                     this.emit("done", queueTask, data)
+                    this.state.currentJobSuccess = true
                 } else {
                     this.state.queue.shift()
                     this.state.queue.push(queueTask)
                     this.emit("fail", queueTask, data)
+                    this.state.currentJobSuccess = false
                 }
 
                 if (this.state.queue?.length) {
@@ -154,3 +163,4 @@ class RsQueue extends EventEmitter {
 }
 
 export default RsQueue
+

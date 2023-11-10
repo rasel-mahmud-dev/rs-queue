@@ -12,7 +12,8 @@ app.use(express.json())
 
 const tweetQueue = new RsQueue('tweet', {
     redisUrl: "redis://127.0.0.1:6379",
-    retryDelay: 2000
+    retryDelay: 2000,
+    nextJobProcessDelay: 100,
 })
 
 
@@ -24,8 +25,8 @@ async function executeTask(jobId: string, data: string, done: Function) {
         console.log("currently processing job : ", jobId)
         let tweet = JSON.parse(data)
         await AppDataSource.manager.save(Tweet, tweet)
-        // data saved on the database
-        done(done)
+        // data saved on the database 
+        done(true) // tell rs-queue to success this job
     } catch (error) {
         done(false)
     } finally {
