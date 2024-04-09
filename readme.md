@@ -4,6 +4,17 @@ RS-Queue is a straightforward job queue that efficiently handles tasks in the ba
 
 ### It has queue monitoring system, and follow event driven architecture.
 
+```sql
+drop table orders;
+create table orders(
+    id serial primary key,
+    customer_id varchar,
+    price double precision,
+    product_id varchar,
+    created_at timestamptz
+)
+
+```
 
 ![img.png](img/img.png)
 

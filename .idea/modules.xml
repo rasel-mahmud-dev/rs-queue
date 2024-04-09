@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/video-stream.iml" filepath="$PROJECT_DIR$/.idea/video-stream.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/RsQueue.iml" filepath="$PROJECT_DIR$/.idea/RsQueue.iml" />
     </modules>
   </component>
 </project>

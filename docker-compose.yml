@@ -1,0 +1,61 @@
+version: '3.8'
+
+volumes:
+  db:
+  redisdata:
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PORT: 5002
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: always
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:16-bullseye
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: rs_queue
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres", "-d", "rs_queue", "-h", "localhost", "-p", "5432" ]
+      interval: 10s
+      timeout: 20s
+      retries: 5
+
+  redis:
+    image: redis:7.2.1-alpine3.18
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+    volumes:
+      - redisdata:/data
+    environment:
+      REDIS_AOF_ENABLED: "yes"
+      REDIS_AOF_FILENAME: "appendonly.aof"
+      REDIS_PASSWORD: 123
+
+networks:
+  app-network:
+    driver: bridge
