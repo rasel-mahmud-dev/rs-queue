@@ -1,7 +1,7 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
 import RsQueue from "../lib/RSQueue";
-import pool, {dbClient} from "./database/db";
+import {dbClient} from "./database/db";
 
 dotenv.config();
 
@@ -11,9 +11,8 @@ app.use(express.json());
 const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
     retryDelay: 0,
-    nextJobProcessDelay: 50
+    nextJobProcessDelay: 0
 })
-
 
 orderQueue.on("ready", () => orderQueue?.slats())
 orderQueue.on("redis-connected", () => {
@@ -33,13 +32,23 @@ orderQueue.on("done", (jobId, a, state) => {
     )
     console.log("task done ", jobId)
 })
+orderQueue.on("finished", (state) => {
+    console.log("finished:: ",
+        Object.keys(state.jobs).length, state.queue.length
+    )
+})
+orderQueue.on("ready", (state) => {
+    console.log("ready:: ",
+        Object.keys(state.jobs).length, state.queue.length
+    )
+})
 
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId)
     try {
         const client = await dbClient()
 
-        const orderData = data;
+        const orderData = JSON.parse(data);
         // done(false)
 
 
@@ -70,16 +79,14 @@ app.get("/order", async (req, res) => {
     let newOrder;
 
     for (let i = 0; i < 100; i++) {
-        const taskId = Date.now().toString() + i
+        const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
-            price,
+            price: price,
             customerId,
             createdAt: new Date().toISOString()
         }
-        const job = orderQueue.createJob(taskId, newOrder)
-        // job.retries(5)
-        await job.save();
+        await orderQueue.createJob(taskId, newOrder)
     }
 
     orderQueue.slats();
