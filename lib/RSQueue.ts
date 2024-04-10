@@ -1,6 +1,5 @@
 import {EventEmitter} from "events";
 import {createClient} from "redis";
-import assert from "node:assert";
 
 interface RsQueueOptions {
     jobsKey: string;
@@ -95,7 +94,7 @@ class RsQueue extends EventEmitter {
         const redisJobs = await this.client.hGetAll(this.option.jobsKey);
         let jobs = redisJobs || {}
         for (let jobKey in jobs) {
-            jobs[jobKey] = JSON.parse(jobs[jobKey])
+            jobs[jobKey] = JSON.parse(jobs[jobKey] || '{"data": "", "opt": {"retries": -1 } }')
         }
         this.state.jobs = jobs
         const jobKeys = Object.keys(this.state.jobs);
@@ -136,7 +135,7 @@ class RsQueue extends EventEmitter {
     }
 
     public createJob(jobId: string, value: object) {
-        this.job["jobId"] = jobId
+        this.job["jobId"] = jobId.toString()
         this.job["value"] = value
         return this.job
     }
@@ -151,8 +150,8 @@ class RsQueue extends EventEmitter {
         return this.job
     }
 
-    timeout(milisecond: number) {
-        this.job.opt.timeout = milisecond
+    timeout(mili: number) {
+        this.job.opt.timeout = mili
         return this.job
     }
 
@@ -177,7 +176,7 @@ class RsQueue extends EventEmitter {
 
             clearTimeout(this.intervalId)
             await this.queueProcess()
-
+            console.log("start again....")
         } catch (ex: any) {
             clearTimeout(this.intervalId)
             await this.queueProcess()
@@ -208,11 +207,20 @@ class RsQueue extends EventEmitter {
 
     async queueProcess() {
         const jobs = this.state.jobs;
+        console.log(
+            Object.keys(jobs).length, this.state.queue.length
+        )
         let queueTask = this.state.queue[0]
+
         if (!queueTask) {
             return clearTimeout(this.intervalId)
         }
         const jobDetail = jobs[queueTask]
+
+        if(!jobDetail){
+            if (this.state.queue?.length) this.interval()
+            return;
+        }
 
         const {opt, data} = jobDetail
 
@@ -230,25 +238,25 @@ class RsQueue extends EventEmitter {
                 await this.client.hSet(this.option.failKey, {
                     [queueTask]: JSON.stringify(data || {})
                 })
-                if (this.state.queue?.length) {
-                    this.interval()
-                }
+
+                if (this.state.queue?.length) this.interval()
                 return;
             }
         }
 
         this.emit("processing", queueTask, jobDetail, async (isDone: boolean) => {
-
             if (isDone) {
-                delete this.state.jobs[queueTask]
                 await this.client.hDel(this.option.jobsKey, queueTask)
-
+                delete this.state.jobs[queueTask]
                 // await this.client.lPush(this.option.doneKey, queueTask) // not need to store a done job
 
                 this.state.done[queueTask] = jobs[queueTask]
                 this.state.queue.shift()
-                this.emit("done", queueTask, jobDetail)
+                this.emit("done", queueTask, jobDetail, this.state)
                 this.state.currentJobSuccess = true
+                await this.client.hSet(this.option.doneKey, {
+                    [queueTask]: JSON.stringify(data || {})
+                })
             } else {
                 this.state.queue.shift()
                 this.state.queue.push(queueTask)
@@ -266,6 +274,9 @@ class RsQueue extends EventEmitter {
             }
 
             if (retries !== -1) {
+                if(!this.state.jobs[queueTask]){
+                    this.state.jobs[queueTask]= {}
+                }
                 this.state.jobs[queueTask].opt = updateOpt
                 await this.client.hSet(this.option.jobsKey, {
                     [queueTask]: JSON.stringify({

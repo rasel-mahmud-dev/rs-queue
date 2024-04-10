@@ -10,8 +10,8 @@ app.use(express.json());
 
 const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
-    retryDelay: 1000,
-    nextJobProcessDelay: 2000
+    retryDelay: 0,
+    nextJobProcessDelay: 50
 })
 
 
@@ -27,49 +27,61 @@ orderQueue.on("redis-connection-fail", (ex) => {
 orderQueue.on("fail", (jobId) => {
     console.log("task fail ", jobId)
 })
+orderQueue.on("done", (jobId, a, state) => {
+    console.log("state:: ",
+        Object.keys(state.jobs).length, state.queue.length
+    )
+    console.log("task done ", jobId)
+})
 
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId)
     try {
         const client = await dbClient()
 
-        const orderData = JSON.parse(data)
-        done(false)
+        const orderData = data;
+        // done(false)
 
 
-        // const {rowCount} = await client.query({
-        //     text: `insert into orders(customer_id, price, product_id, created_at)
-        //            values ($1, $2, $3, $4)`,
-        //     values: [
-        //         orderData.customerId,
-        //         orderData.price,
-        //         orderData.productId,
-        //         orderData.createdAt,
-        //     ]
-        // })
-        //
-        // if (!rowCount) throw Error("Order place fail:::");
-        //
-        // done(true)
+        const {rowCount} = await client.query({
+            text: `insert into orders(customer_id, price, product_id, created_at)
+                   values ($1, $2, $3, $4)`,
+            values: [
+                orderData.customerId,
+                orderData.price,
+                orderData.productId,
+                orderData.createdAt,
+            ]
+        })
 
-    } catch (ex) {
+        if (!rowCount) throw Error("Order place fail:::");
+
+        done(true)
+
+    } catch (ex: any) {
+        console.error(ex?.message)
         done(false)
     }
 })
 
 app.get("/order", async (req, res) => {
     const {productId, price, customerId} = req.body
-    const taskId = Date.now().toString()
 
-    const newOrder = {
-        productId,
-        price,
-        customerId,
-        createdAt: new Date().toISOString()
+    let newOrder;
+
+    for (let i = 0; i < 100; i++) {
+        const taskId = Date.now().toString() + i
+        newOrder = {
+            productId,
+            price,
+            customerId,
+            createdAt: new Date().toISOString()
+        }
+        const job = orderQueue.createJob(taskId, newOrder)
+        // job.retries(5)
+        await job.save();
     }
-    const job = orderQueue.createJob(taskId, newOrder)
-    job.retries(10)
-    await job.save();
+
     orderQueue.slats();
 
     res.send({
