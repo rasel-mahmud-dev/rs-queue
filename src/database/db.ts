@@ -1,4 +1,4 @@
-import {Pool} from "pg";
+import {Pool, PoolClient} from "pg";
 
 const pool = new Pool({
     user: "postgres",
@@ -8,11 +8,12 @@ const pool = new Pool({
     port: 5432,
 });
 
+let _client: Promise<PoolClient>;
 
 export function dbClient(){
-    if(global._client) return global._client;
-    global._client = pool.connect()
-    return global._client
+    if(_client) return _client;
+    _client = pool.connect()
+    return _client
 }
 
 

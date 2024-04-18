@@ -10,11 +10,13 @@ app.use(express.json());
 
 const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
-    retryDelay: 0,
-    nextJobProcessDelay: 0
+    retryDelay: 1000,
+    nextJobProcessDelay: 1000
 })
 
+
 orderQueue.on("ready", () => orderQueue?.slats())
+
 orderQueue.on("redis-connected", () => {
     console.log("redis connected")
 })
@@ -40,29 +42,31 @@ orderQueue.on("ready", (state) => {
         Object.keys(state.jobs).length, state.queue.length
     )
 })
+
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId)
     try {
-        const client = await dbClient()
 
-        const orderData = JSON.parse(data);
-        // done(false)
+        done(false)
 
-
-        const {rowCount} = await client.query({
-            text: `insert into orders(customer_id, price, product_id, created_at)
-                   values ($1, $2, $3, $4)`,
-            values: [
-                orderData.customerId,
-                orderData.price,
-                orderData.productId,
-                orderData.createdAt,
-            ]
-        })
-
-        if (!rowCount) throw Error("Order place fail:::");
-
-        done(true)
+        // const client = await dbClient()
+        //
+        // const orderData = JSON.parse(data);
+        // // done(false)
+        //
+        // const {rowCount} = await client.query({
+        //     text: `insert into orders(customer_id, price, product_id, created_at)
+        //            values ($1, $2, $3, $4)`,
+        //     values: [
+        //         orderData.customerId,
+        //         orderData.price,
+        //         orderData.productId,
+        //         orderData.createdAt,
+        //     ]
+        // })
+        //
+        // if (!rowCount) throw Error("Order place fail:::");
+        // done(true)
 
     } catch (ex: any) {
         console.error(ex?.message)

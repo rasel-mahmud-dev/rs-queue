@@ -8,11 +8,11 @@
       <jdbc-url>jdbc:postgresql://localhost:5432/postgres</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
-    <data-source source="LOCAL" name="rs_queue@192.168.241.27" uuid="1cc4439f-4bee-4f48-84b8-cd27a99f75ff">
+    <data-source source="LOCAL" name="rs_queue@localhost" uuid="1cc4439f-4bee-4f48-84b8-cd27a99f75ff">
       <driver-ref>postgresql</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.postgresql.Driver</jdbc-driver>
-      <jdbc-url>jdbc:postgresql://192.168.241.27:5432/rs_queue</jdbc-url>
+      <jdbc-url>jdbc:postgresql://localhost:5432/rs_queue</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>

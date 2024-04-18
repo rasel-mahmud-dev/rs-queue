@@ -9,8 +9,23 @@ interface RsQueueOptions {
     redisUrl: string;
 }
 
-class RsQueue extends EventEmitter {
+type RsQueueEvent =
+    | 'ready'
+    | 'redis-connected'
+    | 'redis-connection-fail'
+    | 'fail'
+    | 'done'
+    | 'finished'
+    | 'processing';
 
+class RsQueue extends EventEmitter {
+    on(event: RsQueueEvent, listener: (...args: any[]) => void): this {
+        return super.on(event, listener);
+    }
+
+    emit(event: RsQueueEvent, ...args: any[]): boolean {
+        return super.emit(event, ...args);
+    }
     private option = {
         jobsKey: "rq:jobs",
         doneKey: "rq:done",
