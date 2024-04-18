@@ -1,6 +1,7 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
-import RsQueue from "../lib/RSQueue";
+import RsQueue from "../../lib";
+import {dbClient} from "./db";
 
 
 dotenv.config();
@@ -43,32 +44,29 @@ orderQueue.on("ready", (state) => {
     )
 })
 
-orderQueue.restoreJobs()
+// orderQueue.restoreJobs()
 
 orderQueue.on("processing", async function (jobId, data, done) {
-    console.log("Processing job:: ", jobId, data.opt)
+    console.log("Processing job:: ", jobId, data?.opt)
     try {
+        const orderData = data?.data
 
-        done(false)
+        if(!orderData) throw Error("Job data not found")
 
-        // const client = await dbClient()
-        //
-        // const orderData = JSON.parse(data);
-        // // done(false)
-        //
-        // const {rowCount} = await client.query({
-        //     text: `insert into orders(customer_id, price, product_id, created_at)
-        //            values ($1, $2, $3, $4)`,
-        //     values: [
-        //         orderData.customerId,
-        //         orderData.price,
-        //         orderData.productId,
-        //         orderData.createdAt,
-        //     ]
-        // })
-        //
-        // if (!rowCount) throw Error("Order place fail:::");
-        // done(true)
+        const client = await dbClient()
+        const {rowCount} = await client.query({
+            text: `insert into orders(customer_id, price, product_id, created_at)
+                   values ($1, $2, $3, $4)`,
+            values: [
+                orderData.customerId,
+                orderData.price,
+                orderData.productId,
+                orderData.createdAt,
+            ]
+        })
+
+        if (!rowCount) throw Error("Order place fail:::");
+        done(true)
 
     } catch (ex: any) {
         console.error(ex?.message)
@@ -81,7 +79,7 @@ app.get("/order", async (req, res) => {
 
     let newOrder;
 
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 200; i++) {
         const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
@@ -90,7 +88,7 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
-            .delayUntil(0)
+            .delayUntil(200)
             .save()
     }
 
@@ -102,6 +100,13 @@ app.get("/order", async (req, res) => {
     })
 })
 
-export default app
+const PORT = process.env.PORT || 5000
+
+app.listen(PORT, () => {
+    console.info(
+        `Application listening on localhost: ${PORT}`
+    );
+});
+
 
 

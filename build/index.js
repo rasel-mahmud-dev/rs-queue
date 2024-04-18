@@ -3,8 +3,5 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const app_1 = __importDefault(require("./app"));
-const PORT = process.env.PORT || 5000;
-app_1.default.listen(PORT, () => {
-    console.info(`Application listening on localhost: ${PORT}`);
-});
+const RSQueue_1 = __importDefault(require("./RSQueue"));
+exports.default = RSQueue_1.default;

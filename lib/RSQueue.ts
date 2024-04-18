@@ -127,7 +127,7 @@ class RsQueue extends EventEmitter {
             this.state.jobs = {}
             this.state.queue = []
         } catch (ex) {
-
+            throw Error("Could not restore jobs: " + ex)
         }
     }
 
@@ -197,7 +197,7 @@ class RsQueue extends EventEmitter {
                 opt: opt
             }
 
-            const result = await this.client.hSet(this.option.jobsKey, {
+           await this.client.hSet(this.option.jobsKey, {
                 [jobId]: JSON.stringify(jobDetail)
             })
 
@@ -210,7 +210,7 @@ class RsQueue extends EventEmitter {
             // revert...
             delete this.state.jobs[jobId]
             this.state.queue = this.state.queue.filter(el => el !== jobId)
-            console.error(ex?.message)
+            throw Error("Failed to save job: " + ex?.message)
         } finally {
             await this.queueProcess()
         }
@@ -270,7 +270,6 @@ class RsQueue extends EventEmitter {
 
         clearTimeout(this.intervalId)
 
-
         const jobDetail = this.state.jobs?.[this.state.queue?.[0]];
         const delayUntil = jobDetail?.opt?.delayUntil
         if (delayUntil != -1) {
@@ -298,6 +297,7 @@ class RsQueue extends EventEmitter {
                 if (isDone) {
                     delete this.state.jobs[queueTask]
                     await this.client.hDel(this.option.jobsKey, queueTask)
+                    this.state.queue.shift()
 
                 } else {
                     await this.hasRetries2(jobDetail, queueTask)
@@ -310,7 +310,6 @@ class RsQueue extends EventEmitter {
             })
         }, nextTimeout)
     }
-
 
     async jobStarted() {
         if (this.state.queue.length) {

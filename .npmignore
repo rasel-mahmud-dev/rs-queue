@@ -1,0 +1,13 @@
+# Rules from: C:\Users\rasel\Desktop\rs-queue\.gitignore
+node_modules
+.env
+db
+build/
+# npmignore - content above this line is automatically generated and modifications may be omitted
+# see npmjs.com/npmignore for more details.
+test/
+examples/
+database-seed.sql
+docker-compose.yml
+Dockerfile
+tsconfig.json
