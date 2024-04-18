@@ -1,8 +1,8 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
-import RsQueue from "../../lib";
-import {dbClient} from "./db";
+import RsQueue from "rs-queue";
 
+import {dbClient} from "./db";
 
 dotenv.config();
 
@@ -13,7 +13,6 @@ const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
     delayedDebounce: 1000,
 })
-
 
 orderQueue.on("ready", () => orderQueue?.slats())
 
@@ -107,6 +106,3 @@ app.listen(PORT, () => {
         `Application listening on localhost: ${PORT}`
     );
 });
-
-
-

@@ -2,7 +2,7 @@
 node_modules
 .env
 db
-build/
+lib
 # npmignore - content above this line is automatically generated and modifications may be omitted
 # see npmjs.com/npmignore for more details.
 test/
@@ -11,3 +11,4 @@ database-seed.sql
 docker-compose.yml
 Dockerfile
 tsconfig.json
+.idea/
