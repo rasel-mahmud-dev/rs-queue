@@ -18,11 +18,9 @@ orderQueue.on("ready", () => orderQueue?.slats())
 orderQueue.on("redis-connected", () => {
     console.log("redis connected")
 })
-
 orderQueue.on("redis-connection-fail", (ex) => {
     console.log("redis connection fail ", ex)
 })
-
 orderQueue.on("fail", (jobId) => {
     console.log("task fail ", jobId)
 })
@@ -42,7 +40,6 @@ orderQueue.on("ready", (state) => {
         Object.keys(state.jobs).length, state.queue.length
     )
 })
-
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId)
     try {
