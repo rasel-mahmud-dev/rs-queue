@@ -44,7 +44,7 @@ orderQueue.on("ready", (state) => {
 })
 
 orderQueue.on("processing", async function (jobId, data, done) {
-    console.log("Processing job:: ", jobId)
+    console.log("Processing job:: ", jobId, data)
     try {
 
         done(false)
@@ -79,7 +79,7 @@ app.get("/order", async (req, res) => {
 
     let newOrder;
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 3000; i++) {
         const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
@@ -88,6 +88,9 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
+            .retries(10)
+            .delayUntil(1000)
+            .save()
     }
 
     orderQueue.slats();
