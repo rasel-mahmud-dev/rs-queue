@@ -5,6 +5,7 @@ interface RsQueueOptions {
     jobsKey: string;
     doneKey: string;
     // Avoids rapid churn during processing of nearly-concurrent events.
+    // Will be override, if pass job delayUntil grater than -1
     delayedDebounce?: number,
     retryDelay?: number;
     nextJobProcessDelay?: number;
@@ -33,6 +34,7 @@ interface Job {
     opt: JobOpt,
     save: () => Promise<void>,
     retries: (n: number) => Job
+    // Job processing start delay timeout
     delayUntil: (milisecond: number) => Job
 }
 
@@ -222,11 +224,14 @@ class RsQueue extends EventEmitter {
 
 
     hasRetries(jobDetailObj: any) {
-        return jobDetailObj?.opt?.retries || 0
+        return jobDetailObj?.opt?.retries
     }
 
     async hasRetries2(jobDetailObj: any, jobId: string) {
         try {
+            const retries = jobDetailObj?.opt?.retries
+            if (retries === -1) return;
+
             const updatedJob = {
                 ...jobDetailObj,
                 opt: {
@@ -268,7 +273,7 @@ class RsQueue extends EventEmitter {
 
         const jobDetail = this.state.jobs?.[this.state.queue?.[0]];
         const delayUntil = jobDetail?.opt?.delayUntil
-        if(delayUntil != -1){
+        if (delayUntil != -1) {
             nextTimeout = delayUntil
         }
 
@@ -282,8 +287,8 @@ class RsQueue extends EventEmitter {
 
             const jobDetail = jobs[queueTask]
 
-
-            if (!this.hasRetries(jobDetail)) {
+            const retriesCount = this.hasRetries(jobDetail)
+            if (retriesCount === 0) {
                 this.removeJobFromQueue(queueTask)
                 this.jobStarted()
                 return;

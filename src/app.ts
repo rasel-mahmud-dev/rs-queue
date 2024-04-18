@@ -2,6 +2,7 @@ import express, {Application} from "express";
 import dotenv from "dotenv";
 import RsQueue from "../lib/RSQueue";
 
+
 dotenv.config();
 
 const app: Application = express();
@@ -42,7 +43,7 @@ orderQueue.on("ready", (state) => {
     )
 })
 
-// orderQueue.restoreJobs()
+orderQueue.restoreJobs()
 
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId, data.opt)
@@ -89,8 +90,7 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
-            .retries(100000)
-            .delayUntil(5000)
+            .delayUntil(0)
             .save()
     }
 
