@@ -1,7 +1,6 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
 import RsQueue from "../lib/RSQueue";
-import {dbClient} from "./database/db";
 
 dotenv.config();
 
@@ -10,8 +9,7 @@ app.use(express.json());
 
 const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
-    retryDelay: 1000,
-    nextJobProcessDelay: 1000
+    delayedDebounce: 1000,
 })
 
 
@@ -32,6 +30,7 @@ orderQueue.on("done", (jobId, a, state) => {
     )
     console.log("task done ", jobId)
 })
+
 orderQueue.on("finished", (state) => {
     console.log("finished:: ",
         Object.keys(state.jobs).length, state.queue.length
@@ -43,8 +42,10 @@ orderQueue.on("ready", (state) => {
     )
 })
 
+// orderQueue.restoreJobs()
+
 orderQueue.on("processing", async function (jobId, data, done) {
-    console.log("Processing job:: ", jobId, data)
+    console.log("Processing job:: ", jobId, data.opt)
     try {
 
         done(false)
@@ -79,7 +80,7 @@ app.get("/order", async (req, res) => {
 
     let newOrder;
 
-    for (let i = 0; i < 3000; i++) {
+    for (let i = 0; i < 2; i++) {
         const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
@@ -88,8 +89,8 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
-            .retries(10)
-            .delayUntil(1000)
+            .retries(100000)
+            .delayUntil(5000)
             .save()
     }
 

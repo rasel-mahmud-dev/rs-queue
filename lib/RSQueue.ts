@@ -4,6 +4,8 @@ import {createClient} from "redis";
 interface RsQueueOptions {
     jobsKey: string;
     doneKey: string;
+    // Avoids rapid churn during processing of nearly-concurrent events.
+    delayedDebounce?: number,
     retryDelay?: number;
     nextJobProcessDelay?: number;
     redisUrl: string;
@@ -23,9 +25,7 @@ type RsQueueEvent =
 type JobOpt = {
     retries: number,
     delayUntil: number,
-    timeout: number,
 }
-
 
 interface Job {
     jobId: string,
@@ -34,7 +34,6 @@ interface Job {
     save: () => Promise<void>,
     retries: (n: number) => Job
     delayUntil: (milisecond: number) => Job
-    timeout: (milisecond: number) => Job
 }
 
 class RsQueue extends EventEmitter {
@@ -50,8 +49,7 @@ class RsQueue extends EventEmitter {
         jobsKey: "rq:jobs",
         doneKey: "rq:done",
         failKey: "rq:fail",
-        retryDelay: 1000,
-        nextJobProcessDelay: 300,
+        delayedDebounce: 1000,
         redisUrl: "",
     };
 
@@ -61,12 +59,10 @@ class RsQueue extends EventEmitter {
         opt: {
             retries: -1,
             delayUntil: -1,
-            timeout: -1,
         },
         save: this.save.bind(this),
         retries: this.retries.bind(this),
-        delayUntil: this.delayUntil.bind(this),
-        timeout: this.timeout.bind(this)
+        delayUntil: this.delayUntil.bind(this)
     }
 
     private queueName: string | undefined
@@ -84,17 +80,13 @@ class RsQueue extends EventEmitter {
     constructor(queueName: string, options: Partial<RsQueueOptions>) {
         super()
         this.queueProcess = this.queueProcess.bind(this)
-        if (options) {
-            if (options.retryDelay !== undefined) {
-                this.option.retryDelay = options.retryDelay
-            }
 
-            if (options.nextJobProcessDelay !== undefined) {
-                this.option.nextJobProcessDelay = options.nextJobProcessDelay
-            }
-
-            if (options.redisUrl) this.option.redisUrl = options.redisUrl
+        if (options?.delayedDebounce !== undefined) {
+            this.option.delayedDebounce = options.delayedDebounce
         }
+
+        if (options?.redisUrl) this.option.redisUrl = options.redisUrl
+
 
         if (queueName) {
             this.option.jobsKey = `rq:${queueName}:jobs`
@@ -124,6 +116,16 @@ class RsQueue extends EventEmitter {
             return queue
         } catch (ex) {
             return []
+        }
+    }
+
+    private async restoreJobs() {
+        try {
+            await this.client.DEL(this.option.jobsKey);
+            this.state.jobs = {}
+            this.state.queue = []
+        } catch (ex) {
+
         }
     }
 
@@ -165,32 +167,6 @@ class RsQueue extends EventEmitter {
         }
     }
 
-    // public async createJob(jobId: string, value: object) {
-    //     try {
-    //
-    //         let data = JSON.stringify(value)
-    //
-    //         await this.client.hSet(this.option.jobsKey, {
-    //             [jobId]: data
-    //         })
-    //
-    //         this.state.jobs[jobId] = data
-    //         this.state.queue.push(jobId)
-    //
-    //         // this.emit("new", jobId, data)
-    //
-    //     } catch (ex: any) {
-    //         // revert...
-    //         delete this.state.jobs[jobId]
-    //         this.state.queue = this.state.queue.filter(el => el !== jobId)
-    //
-    //         // await this.queueProcess()
-    //         console.error(ex?.message)
-    //     } finally {
-    //         await this.queueProcess()
-    //     }
-    // }
-
     public createJob(jobId: string, value: object) {
         this.job["jobId"] = jobId.toString()
         this.job["value"] = value
@@ -207,11 +183,6 @@ class RsQueue extends EventEmitter {
         return this.job
     }
 
-    timeout(mili: number) {
-        this.job.opt.timeout = mili
-        return this.job
-    }
-
     async save() {
 
         const {jobId, value, opt} = this.job
@@ -219,12 +190,10 @@ class RsQueue extends EventEmitter {
         if (!jobId) return console.error("Invalid Job ID")
 
         try {
-
             const jobDetail = {
                 data: value,
                 opt: opt
             }
-
 
             const result = await this.client.hSet(this.option.jobsKey, {
                 [jobId]: JSON.stringify(jobDetail)
@@ -251,21 +220,9 @@ class RsQueue extends EventEmitter {
         console.error(`${this.queueName} stats:: Done: ${doneCount} Jobs: ${pendingCount}`);
     }
 
-    interval() {
-        try {
-            this.intervalId = setTimeout(async () => {
-                await this.queueProcess()
-            }, 10)
-
-        } catch (ex: any) {
-            console.error(ex?.message)
-        }
-    }
-
 
     hasRetries(jobDetailObj: any) {
-        const retries = jobDetailObj?.opt?.retries || 0
-        return retries
+        return jobDetailObj?.opt?.retries || 0
     }
 
     async hasRetries2(jobDetailObj: any, jobId: string) {
@@ -277,6 +234,7 @@ class RsQueue extends EventEmitter {
                     retries: jobDetailObj.opt.retries - 1
                 }
             }
+
             this.state.jobs[jobId] = updatedJob
             await this.client.hSet(this.option.jobsKey, {
                 [jobId]: JSON.stringify(updatedJob)
@@ -303,11 +261,16 @@ class RsQueue extends EventEmitter {
 
     async queueProcess() {
 
-        const nextTimeout = this.state.currentJobSuccess
-            ? this.option.nextJobProcessDelay
-            : this.option.retryDelay
+        let nextTimeout = this.option.delayedDebounce
 
         clearTimeout(this.intervalId)
+
+
+        const jobDetail = this.state.jobs?.[this.state.queue?.[0]];
+        const delayUntil = jobDetail?.opt?.delayUntil
+        if(delayUntil != -1){
+            nextTimeout = delayUntil
+        }
 
         this.intervalId = setTimeout(() => {
             const jobs = this.state.jobs;
@@ -328,17 +291,15 @@ class RsQueue extends EventEmitter {
 
             this.emit("processing", queueTask, jobDetail, async (isDone: boolean) => {
                 if (isDone) {
-                    this.state.queue.shift()
                     delete this.state.jobs[queueTask]
                     await this.client.hDel(this.option.jobsKey, queueTask)
 
                 } else {
-
                     await this.hasRetries2(jobDetail, queueTask)
-
                     this.emit("fail", queueTask, jobDetail)
                 }
-
+                const firstJob = this.state.queue.shift()
+                firstJob && this.state.queue.push(firstJob)
                 this.jobStarted()
 
             })
