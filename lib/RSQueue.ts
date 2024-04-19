@@ -17,6 +17,7 @@ type RsQueueEvent =
     | 'redis-connected'
     | 'redis-connection-fail'
     | 'fail'
+    | 'retrying'
     | 'done'
     | 'finished'
     | 'processing'
@@ -197,7 +198,7 @@ class RsQueue extends EventEmitter {
                 opt: opt
             }
 
-           await this.client.hSet(this.option.jobsKey, {
+            await this.client.hSet(this.option.jobsKey, {
                 [jobId]: JSON.stringify(jobDetail)
             })
 
@@ -227,10 +228,13 @@ class RsQueue extends EventEmitter {
         return jobDetailObj?.opt?.retries
     }
 
-    async hasRetries2(jobDetailObj: any, jobId: string) {
+    async downRetryingCount(jobDetailObj: any, jobId: string) {
         try {
             const retries = jobDetailObj?.opt?.retries
-            if (retries === -1) return;
+            if (retries === -1) {
+                this.emit("fail", jobId, jobDetailObj)
+                return;
+            }
 
             const updatedJob = {
                 ...jobDetailObj,
@@ -238,6 +242,12 @@ class RsQueue extends EventEmitter {
                     ...jobDetailObj.opt,
                     retries: jobDetailObj.opt.retries - 1
                 }
+            }
+
+            if (updatedJob?.opt?.retries === 0) {
+                this.emit("fail", jobId, jobDetailObj)
+            } else {
+                this.emit("retrying", jobId, jobDetailObj)
             }
 
             this.state.jobs[jobId] = updatedJob
@@ -300,8 +310,7 @@ class RsQueue extends EventEmitter {
                     this.state.queue.shift()
 
                 } else {
-                    await this.hasRetries2(jobDetail, queueTask)
-                    this.emit("fail", queueTask, jobDetail)
+                    await this.downRetryingCount(jobDetail, queueTask)
                 }
                 const firstJob = this.state.queue.shift()
                 firstJob && this.state.queue.push(firstJob)

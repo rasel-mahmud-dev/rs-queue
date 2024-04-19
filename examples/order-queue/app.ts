@@ -1,6 +1,6 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
-import RsQueue from "rs-queue";
+import RsQueue from "../../lib";
 
 import {dbClient} from "./db";
 
@@ -23,7 +23,10 @@ orderQueue.on("redis-connection-fail", (ex) => {
     console.log("redis connection fail ", ex)
 })
 orderQueue.on("fail", (jobId) => {
-    console.log("task fail ", jobId)
+    console.log("task failed ", jobId)
+})
+orderQueue.on("retrying", (jobId) => {
+    console.log("task fail retrying ", jobId)
 })
 orderQueue.on("done", (jobId, a, state) => {
     console.log("state:: ",
