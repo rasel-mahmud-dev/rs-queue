@@ -193,7 +193,6 @@ const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
     delayedDebounce: 1000,
 })
-
 orderQueue.on("ready", () => orderQueue?.slats())
 
 orderQueue.on("redis-connected", () => {
@@ -203,10 +202,10 @@ orderQueue.on("redis-connection-fail", (ex) => {
     console.log("redis connection fail ", ex)
 })
 orderQueue.on("fail", (jobId) => {
-    console.log("task fail ", jobId)
+    console.log("task failed ", jobId)
 })
 orderQueue.on("retrying", (jobId) => {
-    console.log("task retrying ", jobId)
+    console.log("task fail retrying ", jobId)
 })
 orderQueue.on("done", (jobId, a, state) => {
     console.log("state:: ",
@@ -214,7 +213,6 @@ orderQueue.on("done", (jobId, a, state) => {
     )
     console.log("task done ", jobId)
 })
-
 orderQueue.on("finished", (state) => {
     console.log("finished:: ",
         Object.keys(state.jobs).length, state.queue.length
@@ -225,8 +223,13 @@ orderQueue.on("ready", (state) => {
         Object.keys(state.jobs).length, state.queue.length
     )
 })
+orderQueue.on("reset", (state) => {
+    console.log("reset:: trigger ",
+        state.queue.length
+    )
+})
 
-// orderQueue.restoreJobs()
+
 
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId, data?.opt)
@@ -256,12 +259,12 @@ orderQueue.on("processing", async function (jobId, data, done) {
     }
 })
 
-app.get("/order", async (req, res) => {
+app.post("/order", async (req, res) => {
     const {productId, price, customerId} = req.body
 
     let newOrder;
 
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 20; i++) {
         const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
@@ -270,6 +273,7 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
+            // .retries(10) // now it retry failed job infinity
             .delayUntil(200)
             .save()
     }
@@ -279,6 +283,13 @@ app.get("/order", async (req, res) => {
     res.send({
         order: newOrder,
         message: "Order has been added on queue"
+    })
+})
+
+app.get("/reset-task", async (req, res) => {
+    await orderQueue.restoreJobs()
+    res.send({
+        message: "Job task has been reset"
     })
 })
 

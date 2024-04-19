@@ -1,6 +1,6 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
-import RsQueue from "../../lib/RSQueueV2";
+import RsQueue from "../../lib";
 
 import {dbClient} from "./db";
 
@@ -28,25 +28,28 @@ orderQueue.on("fail", (jobId) => {
 orderQueue.on("retrying", (jobId) => {
     console.log("task fail retrying ", jobId)
 })
-orderQueue.on("done", (jobId, jobData, state) => {
+orderQueue.on("done", (jobId, a, state) => {
     console.log("state:: ",
-        Object.keys(state?.jobs).length, state.queue.length
+        Object.keys(state.jobs).length, state.queue.length
     )
     console.log("task done ", jobId)
 })
-
 orderQueue.on("finished", (state) => {
     console.log("finished:: ",
-        state.queue.length
+        Object.keys(state.jobs).length, state.queue.length
     )
 })
 orderQueue.on("ready", (state) => {
     console.log("ready:: ",
+        Object.keys(state.jobs).length, state.queue.length
+    )
+})
+orderQueue.on("reset", (state) => {
+    console.log("reset:: trigger ",
         state.queue.length
     )
 })
 
-// orderQueue.restoreJobs()
 
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId, data?.opt)
@@ -76,12 +79,12 @@ orderQueue.on("processing", async function (jobId, data, done) {
     }
 })
 
-app.get("/order", async (req, res) => {
+app.post("/order", async (req, res) => {
     const {productId, price, customerId} = req.body
 
     let newOrder;
 
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 20; i++) {
         const taskId = Date.now().toString() + "-" + i
         newOrder = {
             productId,
@@ -90,6 +93,7 @@ app.get("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
+            // .retries(10) // now it retry failed job infinity
             .delayUntil(200)
             .save()
     }
@@ -99,6 +103,13 @@ app.get("/order", async (req, res) => {
     res.send({
         order: newOrder,
         message: "Order has been added on queue"
+    })
+})
+
+app.get("/reset-task", async (req, res) => {
+    await orderQueue.restoreJobs()
+    res.send({
+        message: "Job task has been reset"
     })
 })
 

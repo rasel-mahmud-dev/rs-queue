@@ -46,7 +46,8 @@ type RsQueueEvent =
     | 'done'
     | 'finished'
     | 'processing'
-    | 'new';
+    | 'new'
+    | 'reset';
 
 type Ready = (state: State) => void;
 type RedisConnected = () => void;
@@ -56,10 +57,11 @@ type Retrying = (jobId: string, jobData: JobData, state: State) => void;
 type Done = (jobId: string, jobData: JobData, state: State) => void;
 type Finished = (state: State) => void;
 type New = (jobId: string, jobData: JobData, state: State) => void;
-type Processing = (jobId: string, data: { opt?: any; data?: any }, done: (success: boolean) => void) => void;
+type Processing = (jobId: string, jobData: JobData, done: (success: boolean) => void) => void;
+type Reset = (state: State) => void;
 
 
-type EventCallback = Fail | Retrying | Done | Finished | New | Processing | Ready | RedisConnected | RedisConnectionFail
+type EventCallback = Fail | Retrying | Done | Finished | New | Processing | Ready | RedisConnected | RedisConnectionFail | Reset
 
 class RsQueue extends EventEmitter {
     on(event: 'ready', listener: Ready): this;
@@ -71,6 +73,7 @@ class RsQueue extends EventEmitter {
     on(event: 'finished', listener: Finished): this;
     on(event: 'processing', listener: Processing): this;
     on(event: 'new', listener: New): this;
+    on(event: 'reset', listener: Reset): this;
 
     on(event: RsQueueEvent, listener: EventCallback): this {
         return super.on(event, listener);
@@ -105,7 +108,7 @@ class RsQueue extends EventEmitter {
     private intervalId: NodeJS.Timeout | undefined;
 
     private state: State = {
-        done: {} ,
+        done: {},
         queue: [],
         jobs: {}
     };
@@ -154,11 +157,12 @@ class RsQueue extends EventEmitter {
         }
     }
 
-    private async restoreJobs() {
+    async restoreJobs() {
         try {
             await this.client.DEL(this.option.jobsKey);
             this.state.jobs = {}
             this.state.queue = []
+            this.emit('reset', this.state)
         } catch (ex) {
             throw Error("Could not restore jobs: " + ex)
         }
@@ -340,7 +344,7 @@ class RsQueue extends EventEmitter {
                     delete this.state.jobs[queueTask]
                     await this.client.hDel(this.option.jobsKey, queueTask)
                     this.state.queue.shift()
-
+                    this.emit("done", queueTask, jobDetail, this.state)
                 } else {
                     await this.downRetryingCount(jobDetail, queueTask)
                 }
