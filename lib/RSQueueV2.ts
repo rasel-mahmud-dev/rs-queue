@@ -10,16 +10,6 @@ interface RsQueueOptions {
     redisUrl: string;
 }
 
-type State = {
-    done: Record<string, string>,
-    queue: string[]
-    jobs: Record<string, JobData>
-}
-
-type JobData = {
-    data: any,
-    opt: JobOpt
-}
 
 type JobOpt = {
     retries: number,
@@ -28,12 +18,22 @@ type JobOpt = {
 
 interface Job {
     jobId: string,
-    value: object | null,
+    value: JobData | null,
     opt: JobOpt,
     save: () => Promise<void>,
     retries: (n: number) => Job
     // Job processing start delay timeout
     delayUntil: (milisecond: number) => Job
+}
+
+type State = {
+    done: Record<string, string>,
+    queue: string[]
+}
+
+type JobData = {
+    data: any,
+    opt: JobOpt
 }
 
 
@@ -59,7 +59,9 @@ type New = (jobId: string, jobData: JobData, state: State) => void;
 type Processing = (jobId: string, data: { opt?: any; data?: any }, done: (success: boolean) => void) => void;
 
 
+
 type EventCallback = Fail | Retrying | Done | Finished | New | Processing | Ready | RedisConnected | RedisConnectionFail
+
 
 class RsQueue extends EventEmitter {
     on(event: 'ready', listener: Ready): this;
@@ -75,7 +77,6 @@ class RsQueue extends EventEmitter {
     on(event: RsQueueEvent, listener: EventCallback): this {
         return super.on(event, listener);
     }
-
 
     emit(event: RsQueueEvent, ...args: any[]): boolean {
         return super.emit(event, ...args);
@@ -105,9 +106,8 @@ class RsQueue extends EventEmitter {
     private intervalId: NodeJS.Timeout | undefined;
 
     private state: State = {
-        done: {} ,
-        queue: [],
-        jobs: {}
+        done: {},
+        queue: []
     };
 
     private client: any | undefined;
@@ -136,17 +136,7 @@ class RsQueue extends EventEmitter {
     private async pullFromRedis() {
         try {
             const redisJobs = await this.client.hGetAll(this.option.jobsKey);
-            const jsMapping: { [key: string]: any } = {}
-            const queue: string[] = []
-            for (let redisJobsKey in redisJobs) {
-                const data = redisJobs[redisJobsKey]
-                if (!data) continue;
-                const jsData = JSON.parse(data)
-                if (!jsData) continue;
-                jsMapping[redisJobsKey] = jsData
-                queue.push(redisJobsKey)
-            }
-            this.state.jobs = jsMapping
+            const queue = Object.keys(redisJobs)
             this.state.queue = queue
             return queue
         } catch (ex) {
@@ -157,7 +147,6 @@ class RsQueue extends EventEmitter {
     private async restoreJobs() {
         try {
             await this.client.DEL(this.option.jobsKey);
-            this.state.jobs = {}
             this.state.queue = []
         } catch (ex) {
             throw Error("Could not restore jobs: " + ex)
@@ -202,7 +191,7 @@ class RsQueue extends EventEmitter {
         }
     }
 
-    public createJob(jobId: string, value: object) {
+    public createJob(jobId: string, value: any) {
         this.job["jobId"] = jobId.toString()
         this.job["value"] = value
         return this.job
@@ -225,7 +214,7 @@ class RsQueue extends EventEmitter {
         if (!jobId) return console.error("Invalid Job ID")
 
         try {
-            const jobDetail = {
+            const jobDetail: JobData = {
                 data: value,
                 opt: opt
             }
@@ -234,14 +223,12 @@ class RsQueue extends EventEmitter {
                 [jobId]: JSON.stringify(jobDetail)
             })
 
-            this.state.jobs[jobId] = jobDetail
             this.state.queue.push(jobId)
 
             this.emit("new", jobId, jobDetail)
 
         } catch (ex: any) {
             // revert...
-            delete this.state.jobs[jobId]
             this.state.queue = this.state.queue.filter(el => el !== jobId)
             throw Error("Failed to save job: " + ex?.message)
         } finally {
@@ -251,8 +238,8 @@ class RsQueue extends EventEmitter {
 
     slats() {
         const doneCount = Object.keys(this.state.done).length;
-        const pendingCount = Object.keys(this.state.jobs).length;
-        console.error(`${this.queueName} stats:: Done: ${doneCount} Jobs: ${pendingCount}`);
+        // const pendingCount = Object.keys(this.state.jobs).length;
+        console.error(`${this.queueName} stats:: Done: ${doneCount} Jobs: ${"not implemented"}`);
     }
 
 
@@ -282,26 +269,32 @@ class RsQueue extends EventEmitter {
                 this.emit("retrying", jobId, jobDetailObj)
             }
 
-            this.state.jobs[jobId] = updatedJob
             await this.client.hSet(this.option.jobsKey, {
                 [jobId]: JSON.stringify(updatedJob)
             })
 
         } catch {
             // revert if redis not update
-            this.state.jobs[jobId] = jobDetailObj
         }
 
     }
 
-    async removeJobFromQueue(jobId: string) {
+    async removeJobFromQueue(jobId: any) {
         try {
             this.state.queue = this.state.queue.filter(el => el !== jobId)
-            delete this.state.jobs[jobId]
             await this.client.hDel(this.option.jobsKey, jobId)
             return 1
         } catch (ex: any) {
             throw new Error("Job remove fail: " + ex?.message)
+        }
+    }
+
+    async getJobDetail(jobId: string) {
+        try {
+            const jobData = await this.client.hGet(this.option.jobsKey, jobId)
+            return JSON.parse(jobData) as JobData
+        } catch (ex: any) {
+            return null
         }
     }
 
@@ -312,21 +305,24 @@ class RsQueue extends EventEmitter {
 
         clearTimeout(this.intervalId)
 
-        const jobDetail = this.state.jobs?.[this.state.queue?.[0]];
+        let queueTask = this.state.queue[0]
+
+        if (!queueTask) return clearTimeout(this.intervalId)
+
+
+        const jobDetail = await this.getJobDetail(queueTask)
+        if(!jobDetail) return clearTimeout(this.intervalId)
+
         const delayUntil = jobDetail?.opt?.delayUntil
         if (delayUntil != -1) {
             nextTimeout = delayUntil
         }
 
         this.intervalId = setTimeout(() => {
-            const jobs = this.state.jobs;
-            let queueTask = this.state.queue[0]
 
             if (!queueTask) {
                 return clearTimeout(this.intervalId)
             }
-
-            const jobDetail = jobs[queueTask]
 
             const retriesCount = this.hasRetries(jobDetail)
             if (retriesCount === 0) {
@@ -337,7 +333,6 @@ class RsQueue extends EventEmitter {
 
             this.emit("processing", queueTask, jobDetail, async (isDone: boolean) => {
                 if (isDone) {
-                    delete this.state.jobs[queueTask]
                     await this.client.hDel(this.option.jobsKey, queueTask)
                     this.state.queue.shift()
 

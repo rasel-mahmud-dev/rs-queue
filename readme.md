@@ -88,6 +88,21 @@ orderQueue.on("finished", (state) => {
 - **`processing`**: Emitted when a job starts processing.
 - **`new`**: Emitted when a new job is added to the queue.
 
+# V2
+V2 implementation for RsQueue get job detail from direct redis queue. 
+It most suitable for run same job queue in several processor (multi-threading)
+
+Note: But you can not access jobs that can be V1.
+```typescript
+orderQueue.on("done", (jobId, a, state) => {
+    state.jobs // thow error not exist jobs on state object. 
+})
+```
+
+
+<br/>
+<br/>
+
 # **Integrating With Real world Project with Express.js for Order Processing**
 
 In this tutorial, we'll explore how to integrate Redis Queue with an Express.js application to manage and process orders asynchronously.
@@ -145,7 +160,6 @@ express-redis-queue/
 This file initializes a database connection:
 
 ```tsx
-typescriptCopy code
 import { Client } from 'pg';
 
 export const dbClient = async () => {
@@ -190,6 +204,9 @@ orderQueue.on("redis-connection-fail", (ex) => {
 })
 orderQueue.on("fail", (jobId) => {
     console.log("task fail ", jobId)
+})
+orderQueue.on("retrying", (jobId) => {
+    console.log("task retrying ", jobId)
 })
 orderQueue.on("done", (jobId, a, state) => {
     console.log("state:: ",

@@ -1,6 +1,6 @@
 import express, {Application} from "express";
 import dotenv from "dotenv";
-import RsQueue from "../../lib";
+import RsQueue from "../../lib/RSQueueV2";
 
 import {dbClient} from "./db";
 
@@ -28,21 +28,21 @@ orderQueue.on("fail", (jobId) => {
 orderQueue.on("retrying", (jobId) => {
     console.log("task fail retrying ", jobId)
 })
-orderQueue.on("done", (jobId, a, state) => {
+orderQueue.on("done", (jobId, jobData, state) => {
     console.log("state:: ",
-        Object.keys(state.jobs).length, state.queue.length
+        Object.keys(state?.jobs).length, state.queue.length
     )
     console.log("task done ", jobId)
 })
 
 orderQueue.on("finished", (state) => {
     console.log("finished:: ",
-        Object.keys(state.jobs).length, state.queue.length
+        state.queue.length
     )
 })
 orderQueue.on("ready", (state) => {
     console.log("ready:: ",
-        Object.keys(state.jobs).length, state.queue.length
+        state.queue.length
     )
 })
 
