@@ -28,22 +28,19 @@ orderQueue.on("fail", (jobId) => {
 orderQueue.on("retrying", (jobId) => {
     console.log("task fail retrying ", jobId)
 })
-orderQueue.on("done", (jobId, a, state) => {
-    console.log("state:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
+orderQueue.on("expired_time", (jobId, jobData, done) => {
+    console.log("job expired_time ", jobId)
+    // store these jobs to other place like database to track
+    done(true)
+
+})
+orderQueue.on("done", (jobId) => {
     console.log("task done ", jobId)
 })
 orderQueue.on("finished", (state) => {
-    console.log("finished:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
+    console.log("jobs finished ", state.completed.length)
 })
-orderQueue.on("ready", (state) => {
-    console.log("ready:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
-})
+
 orderQueue.on("reset", (state) => {
     console.log("reset:: trigger ",
         state.queue.length
@@ -56,7 +53,7 @@ orderQueue.on("processing", async function (jobId, data, done) {
     try {
         const orderData = data?.data
 
-        if(!orderData) throw Error("Job data not found")
+        if (!orderData) throw Error("Job data not found")
 
         const client = await dbClient()
         const {rowCount} = await client.query({
@@ -93,8 +90,8 @@ app.post("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
-            // .retries(10) // now it retry failed job infinity
-            .delayUntil(200)
+            .delayUntil(1000)
+            .expiredTime(1000 * 60)
             .save()
     }
 

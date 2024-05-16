@@ -1,6 +1,7 @@
 # **rs-queue**
 
-**`rs-queue`** is a lightweight Redis-based queue management library for Node.js applications. It provides a simple yet powerful interface for handling asynchronous tasks and job processing.
+**`rs-queue`** is a lightweight Redis-based queue management library for Node.js applications. It provides a simple yet
+powerful interface for handling asynchronous tasks and job processing.
 
 ## **Installation**
 
@@ -49,6 +50,53 @@ const job = orderQueue.createJob(jobId, jobData)
 
 ```
 
+### CreateJob All Chaining 
+
+`createJob(jobId: string, value: any): Job`
+Creates a new job with the specified jobId and value.
+
+Parameters:
+
+- jobId (string): A unique identifier for the job.
+- value (any): The data associated with the job. 
+
+Returns: A Job object with chainable methods for further configuration.
+
+`retries(n: number): Job`
+Sets the number of retry attempts for the job.
+
+Parameters:
+
+- n (number): The number of retry attempts.
+
+Returns: The Job object for chaining.
+
+`expiredTime(timeMili: number): Job`
+Sets the expiration time for the job.
+
+Parameters:
+
+- timeMili (number): The expiration time in milliseconds from the current time.
+
+Returns: The Job object for chaining.
+
+`delayUntil(milisecond: number): Job`
+Sets a delay for the job processing.
+
+Parameters:
+
+- milisecond (number): The delay in milliseconds before the job is processed.
+
+Returns: The Job object for chaining.
+
+`save(): Promise<void>`
+Saves the job to the queue. This method must be called to persist the job.
+
+Returns: A promise that resolves when the job is successfully saved.
+
+
+
+
 ### **Event Handling**
 
 ```tsx
@@ -83,21 +131,37 @@ orderQueue.on("finished", (state) => {
 - **`redis-connected`**: Emitted when connected to Redis.
 - **`redis-connection-fail`**: Emitted when failed to connect to Redis.
 - **`fail`**: Emitted when a job fails.
+- **`retrying`**: Emitted when a job retrying.
+- **`expired_time`**: Emitted when a job attempt amd retrying time is expired.
 - **`done`**: Emitted when a job is successfully processed.
 - **`finished`**: Emitted when all jobs in the queue have been processed.
 - **`processing`**: Emitted when a job starts processing.
 - **`new`**: Emitted when a new job is added to the queue.
 
-# V2
-V2 implementation for RsQueue get job detail from direct redis queue. 
-It most suitable for run same job queue in several processor (multi-threading)
-
-Note: But you can not access jobs that can be V1.
-```typescript
-orderQueue.on("done", (jobId, a, state) => {
-    state.jobs // thow error not exist jobs on state object. 
-})
+### Library EVENT implementation
+```shell
+on(event: 'ready', listener: Ready): this;
+on(event: 'redis-connected', listener: RedisConnected): this;
+on(event: 'redis-connection-fail', listener: RedisConnectionFail): this;
+on(event: 'fail', listener: Fail): this;
+on(event: 'retrying', listener: Retrying): this;
+on(event: 'done', listener: Done): this;
+on(event: 'finished', listener: Finished): this;
+on(event: 'processing', listener: Processing): this;
+on(event: 'expired_time', listener: ExpiredJob): this;
+on(event: 'new', listener: New): this;
+on(event: 'reset', listener: Reset): this;
 ```
+
+`orderQueue.on("expired_time", (jobId, jobData, done) => {})`
+
+The expired_time event is emitted when a job reaches its expiration time without being processed.
+
+Parameters:
+- jobId (string): The unique identifier of the expired job.
+- jobData (any): The data associated with the expired job.
+- done (function): A callback function to signal the completion of handling the expired job. 
+Call done(true) to indicate the job has been handled, and it will remove from queue. you can store in other database to track fail jobs. 
 
 
 <br/>
@@ -105,7 +169,8 @@ orderQueue.on("done", (jobId, a, state) => {
 
 # **Integrating With Real world Project with Express.js for Order Processing**
 
-In this tutorial, we'll explore how to integrate Redis Queue with an Express.js application to manage and process orders asynchronously.
+In this tutorial, we'll explore how to integrate Redis Queue with an Express.js application to manage and process orders
+asynchronously.
 
 ## **Prerequisites**
 
@@ -151,7 +216,7 @@ express-redis-queue/
 
 ```
 
-## 
+##  
 
 ## **Code Overview**
 
@@ -160,7 +225,7 @@ express-redis-queue/
 This file initializes a database connection:
 
 ```tsx
-import { Client } from 'pg';
+import {Client} from 'pg';
 
 export const dbClient = async () => {
     const client = new Client({
@@ -193,6 +258,7 @@ const orderQueue = new RsQueue("order", {
     redisUrl: `redis://redis:6379`,
     delayedDebounce: 1000,
 })
+
 orderQueue.on("ready", () => orderQueue?.slats())
 
 orderQueue.on("redis-connected", () => {
@@ -207,22 +273,19 @@ orderQueue.on("fail", (jobId) => {
 orderQueue.on("retrying", (jobId) => {
     console.log("task fail retrying ", jobId)
 })
-orderQueue.on("done", (jobId, a, state) => {
-    console.log("state:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
+orderQueue.on("expired_time", (jobId, jobData, done) => {
+    console.log("job expired_time ", jobId)
+    // store these jobs to other place like database to track
+    done(true)
+
+})
+orderQueue.on("done", (jobId) => {
     console.log("task done ", jobId)
 })
 orderQueue.on("finished", (state) => {
-    console.log("finished:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
+    console.log("jobs finished ", state.completed.length)
 })
-orderQueue.on("ready", (state) => {
-    console.log("ready:: ",
-        Object.keys(state.jobs).length, state.queue.length
-    )
-})
+
 orderQueue.on("reset", (state) => {
     console.log("reset:: trigger ",
         state.queue.length
@@ -230,13 +293,12 @@ orderQueue.on("reset", (state) => {
 })
 
 
-
 orderQueue.on("processing", async function (jobId, data, done) {
     console.log("Processing job:: ", jobId, data?.opt)
     try {
         const orderData = data?.data
 
-        if(!orderData) throw Error("Job data not found")
+        if (!orderData) throw Error("Job data not found")
 
         const client = await dbClient()
         const {rowCount} = await client.query({
@@ -273,8 +335,8 @@ app.post("/order", async (req, res) => {
             createdAt: new Date().toISOString()
         }
         await orderQueue.createJob(taskId, newOrder)
-            // .retries(10) // now it retry failed job infinity
-            .delayUntil(200)
+            .delayUntil(1000)
+            .expiredTime(1000 * 60)
             .save()
     }
 
@@ -305,6 +367,8 @@ app.listen(PORT, () => {
 
 ## **Conclusion**
 
-In this tutorial, we've set up an Express.js application integrated with Redis Queue to manage and process orders asynchronously. This approach allows us to offload heavy processing tasks to background jobs, ensuring better scalability and responsiveness for our application.
+In this tutorial, we've set up an Express.js application integrated with Redis Queue to manage and process orders
+asynchronously. This approach allows us to offload heavy processing tasks to background jobs, ensuring better
+scalability and responsiveness for our application.
 
 Feel free to customize this code to fit your specific requirements and enhance the functionality as needed.
